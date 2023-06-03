@@ -76,6 +76,8 @@
 
 #define GALLIUM_ZINK
 #ifdef GALLIUM_ZINK
+#include <vulkan/vulkan_android.h>
+#include <vulkan/vulkan_metal.h>
 #include "kopper_interface.h"
 struct zink_screen {
    struct pipe_screen base;
@@ -351,8 +353,8 @@ osmesa_st_framebuffer_flush_front(struct st_context *st,
    //printf("FRONT_LEFT: %p\n", osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT]);
    //osmesa_st_framebuffer_flush_front
    //printf("screen->flush_frontbuffer = %p\n", screen->flush_frontbuffer);
-   stctx->pipe->flush_resource(stctx->pipe, res); //osbuffer->textures[ST_ATTACHMENT_BACK_LEFT]
-   ((struct zink_screen *)screen)->base.flush_frontbuffer(screen, stctx->pipe, res, 0, 0, NULL /* drawable */, NULL /* sub_box */);
+   st->pipe->flush_resource(st->pipe, res); //osbuffer->textures[ST_ATTACHMENT_BACK_LEFT]
+   ((struct zink_screen *)screen)->base.flush_frontbuffer(screen, st->pipe, res, 0, 0, NULL /* drawable */, NULL /* sub_box */);
    osbuffer->textures[ST_ATTACHMENT_BACK_LEFT] = osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT];
    osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT] = res;
 
@@ -1039,5 +1041,5 @@ OSMesaPostprocess(OSMesaContext osmesa, const char *filter,
 GLAPI void GLAPIENTRY
 OSMesaFlushFrontbuffer() {
    OSMesaContext osmesa = OSMesaGetCurrentContext();
-   osmesa_st_framebuffer_flush_front(osmesa->stctx, osmesa->current_buffer->stfb, ST_ATTACHMENT_BACK_LEFT);
+   osmesa_st_framebuffer_flush_front(osmesa->st, osmesa->current_buffer->base, ST_ATTACHMENT_BACK_LEFT);
 }
