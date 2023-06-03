@@ -49,7 +49,7 @@ jobs:
             -Dxlib-lease=disabled \
             -Degl=disabled \
             -Dgbm=disabled \
-            -Dglx=dri \
+            -Dglx=disabled \
             -Dglx-direct=true \
             -Dopengl=true \
             -Dosmesa=true \
