@@ -76,6 +76,7 @@
 
 #define GALLIUM_ZINK
 #ifdef GALLIUM_ZINK
+#include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_android.h>
 #include <vulkan/vulkan_metal.h>
 #include "kopper_interface.h"
