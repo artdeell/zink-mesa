@@ -1042,5 +1042,5 @@ OSMesaPostprocess(OSMesaContext osmesa, const char *filter,
 GLAPI void GLAPIENTRY
 OSMesaFlushFrontbuffer() {
    OSMesaContext osmesa = OSMesaGetCurrentContext();
-   osmesa_st_framebuffer_flush_front(osmesa->st, osmesa->current_buffer->base, ST_ATTACHMENT_BACK_LEFT);
+   osmesa_st_framebuffer_flush_front(osmesa->st, &osmesa->current_buffer->base, ST_ATTACHMENT_BACK_LEFT);
 }
