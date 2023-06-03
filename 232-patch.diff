@@ -1,0 +1,1971 @@
+diff --git a/.github/workflows/android.yml b/.github/workflows/android.yml
+new file mode 100644
+index 0000000..5ba94c6
+--- /dev/null
++++ b/.github/workflows/android.yml
+@@ -0,0 +1,70 @@
++
++name: Build Android
++
++on:
++  [push, pull_request]
++
++# A workflow run is made up of one or more jobs that can run sequentially or in parallel
++jobs:
++  build:
++    strategy:
++      matrix:
++        arch: [ "arm32", "aarch64", "x86_64" ]
++      fail-fast: false
++
++    name: "Build for ${{matrix.arch}}"
++
++    runs-on: ubuntu-20.04
++
++    steps:
++      - uses: actions/checkout@v2
++
++      - name: Build
++        run: |
++          ln -s vulkan_android.pc vulkan.pc
++          sudo apt update
++          sudo apt install -y meson libxrandr-dev libxxf86vm-dev libxcb-*-dev libx11-xcb-dev libxfixes-dev libdrm-dev libx11-dev
++          cp -R /usr/include/X11 include/
++          cp -R /usr/include/xcb include/
++          cp -R /usr/include/GL/* include/GL/
++          pip3 install mako
++          #
++          if [ "${{matrix.arch}}" == "arm32" ]; then
++            export ANDROID_TARGET=armv7a-linux-androideabi
++          elif [ "${{matrix.arch}}" == "aarch64" ]; then
++            export ANDROID_TARGET=aarch64-linux-android
++          elif [ "${{matrix.arch}}" == "x86_64" ]; then
++            export ANDROID_TARGET=x86_64-linux-android
++          fi
++          bash android-cross-file-gen.sh
++          # -Dglx=gallium-xlib \
++          meson "build-android-${{matrix.arch}}" \
++            --prefix=/tmp/mesa \
++            --cross-file "/tmp/generated-cross-file" \
++            --buildtype debug \
++            -Dplatforms=android \
++            -Dplatform-sdk-version=26 \
++            -Dandroid-stub=true \
++            -Dllvm=disabled \
++            -Dxlib-lease=disabled \
++            -Degl=disabled \
++            -Dgbm=disabled \
++            -Dglx=dri \
++            -Dglx-direct=true \
++            -Dopengl=true \
++            -Dosmesa=true \
++            -Dvulkan-drivers= \
++            -Dgallium-drivers=zink \
++            -Dshared-glapi=false
++          ninja -C "build-android-${{matrix.arch}}" install
++          # cp "build-android-${{matrix.arch}}/src/gallium/drivers/mesa/libzinkk.a" /tmp/mesa/lib/
++          rm /tmp/mesa/lib/libOSMesa.so /tmp/mesa/lib/libOSMesa.so.8
++          mv /tmp/mesa/lib/libOSMesa.so.8.0.0 /tmp/mesa/lib/libOSMesa.so.8
++          mv /tmp/mesa/lib/libOSMesa.so.8 /tmp/mesa/lib/libOSMesa_unstripped.so.8
++          # $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/${ANDROID_TARGET}-strip /tmp/mesa/lib/libOSMesa.so.8
++          # mv /tmp/mesa/lib/libOSMesa.so.8 /tmp/mesa/lib/libOSMesa_8.so
++      - name: Upload libraries
++        uses: actions/upload-artifact@v2
++        with:
++          name: libmesa_${{matrix.arch}}
++          path: /tmp/mesa
+diff --git a/.github/workflows/ios.yml b/.github/workflows/ios.yml
+new file mode 100644
+index 0000000..67efc35
+--- /dev/null
++++ b/.github/workflows/ios.yml
+@@ -0,0 +1,48 @@
++
++name: Build iOS
++
++on:
++  [push, pull_request]
++
++jobs:
++  build:
++    runs-on: macos-latest
++
++    steps:
++      - uses: actions/checkout@v2
++
++      - name: Build iOS
++        run: |
++          git clone --depth 1 https://github.com/KhronosGroup/MoltenVK
++          ln -s vulkan_ios.pc vulkan.pc
++          brew install meson pkg-config
++          # sudo apt install -y meson libxrandr-dev libxxf86vm-dev libxshmfence-dev libxcb-*-dev libx11-xcb-dev libxfixes-dev libdrm-dev libx11-dev
++          # cp -R /usr/include/X11 include/
++          # cp -R /usr/include/xcb include/
++          # cp -R /usr/include/GL/* include/GL/
++          pip3 install mako
++          # -Dglx=gallium-xlib \
++          # -Dglx=dri
++          meson build-ios-aarch64 \
++            --prefix="/tmp/zink" \
++            --cross-file ios-aarch64 \
++            -Dmoltenvk-dir=../../../../MoltenVK/MoltenVK \
++            -Db_lundef=false \
++            -Dllvm=disabled \
++            -Dxlib-lease=disabled \
++            -Degl=disabled \
++            -Dgbm=disabled \
++            -Dglx=dri \
++            -Dglx-direct=true \
++            -Dopengl=true \
++            -Dosmesa=true \
++            -Dvulkan-drivers= \
++            -Dgallium-drivers=zink
++          ninja -C build-ios-aarch64 install
++          # cp build-ios-aarch64/src/gallium/drivers/zink/libzink.a /tmp/zink/lib/
++          install_name_tool -change /tmp/zink/lib/libglapi.0.dylib @executable_path/Frameworks/libglapi.0.dylib.framework/libglapi.0.dylib -add_rpath @executable_path/Frameworks/libMoltenVK.dylib.framework /tmp/zink/lib/libOSMesa.8.dylib
++      - name: Upload libraries
++        uses: actions/upload-artifact@v2
++        with:
++          name: libzink
++          path: /tmp/zink
+diff --git a/.gitignore b/.gitignore
+index 5a7eb0e..0a52505 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,3 +3,4 @@
+ *.pyo
+ *.out
+ /build
++/build-android-*
+diff --git a/.gitignore.rej b/.gitignore.rej
+new file mode 100644
+index 0000000..a7a5d70
+--- /dev/null
++++ b/.gitignore.rej
+@@ -0,0 +1,6 @@
++diff a/.gitignore b/.gitignore	(rejected hunks)
++@@ -2,3 +2,4 @@
++ *.pyo
++ *.out
++ build
+++build-android-*
+diff --git a/android-cross-file-gen.sh b/android-cross-file-gen.sh
+new file mode 100644
+index 0000000..13dbd7c
+--- /dev/null
++++ b/android-cross-file-gen.sh
+@@ -0,0 +1,4 @@
++#!/bin/bash
++set -e
++
++envsubst < android-cross-file.tmp > /tmp/generated-cross-file
+diff --git a/android-cross-file.tmp b/android-cross-file.tmp
+new file mode 100644
+index 0000000..848f6dd
+--- /dev/null
++++ b/android-cross-file.tmp
+@@ -0,0 +1,22 @@
++[binaries]
++ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
++c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/${ANDROID_TARGET}26-clang', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC']
++cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/${ANDROID_TARGET}26-clang++', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
++c_ld = 'lld'
++cpp_ld = 'lld'
++strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/${ANDROID_TARGET}26-strip'
++# Android doesn't come with a pkg-config, but we need one for meson to be happy not
++# finding all the optional deps it looks for.  Use system pkg-config pointing at a
++# directory we get to populate with any .pc files we want to add for Android
++pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
++
++[host_machine]
++system = 'linux'
++# cpu_family = 'x86_64'
++# cpu = 'amd64'
++
++# ik this is wrong but workaround sanity check
++cpu_family = 'arm'
++cpu = 'armv8'
++
++endian = 'little'
+diff --git a/ext/libMoltenVK.tbd b/ext/libMoltenVK.tbd
+new file mode 100644
+index 0000000..cb9056d
+--- /dev/null
++++ b/ext/libMoltenVK.tbd
+@@ -0,0 +1,179 @@
++--- !tapi-tbd
++tbd-version:     4
++targets:         [ arm64-ios ]
++uuids:
++  - target:          arm64-ios
++    value:           B6460E6F-C706-348A-95ED-21110EECFEB4
++flags:           [ not_app_extension_safe ]
++install-name:    '@rpath/libMoltenVK.dylib'
++exports:
++  - targets:         [ arm64-ios ]
++    symbols:         [ __ZN3mvk11canReadFileERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE,
++                       __ZN3mvk12absolutePathERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE,
++                       __ZN3mvk12canWriteFileERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE,
++                       __ZN3mvk13pathExtensionERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE,
++                       __ZN3mvk14MSLShaderInputC1Ev, __ZN3mvk14MSLShaderInputC2Ev,
++                       __ZN3mvk17pathWithExtensionERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEES6_bS6_,
++                       __ZN3mvk18MSLResourceBindingC1Ev, __ZN3mvk18MSLResourceBindingC2Ev,
++                       __ZN3mvk19SPIRVToMSLConverter7convertERNS_33SPIRVToMSLConversionConfigurationEbbb,
++                       __ZN3mvk19SPIRVToMSLConverter8setSPIRVEPKjm, __ZN3mvk20GLSLToSPIRVConverter7convertE28MVKGLSLConversionShaderStagebb,
++                       __ZN3mvk20GLSLToSPIRVConverter7setGLSLEPKcm, __ZN3mvk20GLSLToSPIRVConverter7setGLSLERKNSt3__112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE,
++                       __ZN3mvk20GLSLToSPIRVConverter8setGLSLsERKNSt3__16vectorINS1_12basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEENS6_IS8_EEEE,
++                       __ZN3mvk27SPIRVToMSLConversionOptions15printMSLVersionEjb,
++                       __ZN3mvk27SPIRVToMSLConversionOptionsC1Ev, __ZN3mvk27SPIRVToMSLConversionOptionsC2Ev,
++                       __ZN3mvk33SPIRVToMSLConversionConfiguration29markAllInputsAndResourcesUsedEv,
++                       __ZN3mvk33SPIRVToMSLConversionConfiguration9alignWithERKS0_,
++                       __ZN3mvk8fileNameERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEEb,
++                       __ZN3mvk8readFileERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEERNS0_6vectorIcS5_EERS6_,
++                       __ZN3mvk9writeFileERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEERKNS0_6vectorIcS5_EERS6_,
++                       __ZNK3mvk14MSLShaderInput7matchesERKS0_, __ZNK3mvk17DescriptorBinding7matchesERKS0_,
++                       __ZNK3mvk18MSLResourceBinding7matchesERKS0_, __ZNK3mvk27SPIRVToMSLConversionOptions7matchesERKS0_,
++                       __ZNK3mvk33SPIRVToMSLConversionConfiguration14isResourceUsedEN3spv14ExecutionModelEjj,
++                       __ZNK3mvk33SPIRVToMSLConversionConfiguration19countShaderInputsAtEj,
++                       __ZNK3mvk33SPIRVToMSLConversionConfiguration25isShaderInputLocationUsedEj,
++                       __ZNK3mvk33SPIRVToMSLConversionConfiguration29stageSupportsVertexAttributesEv,
++                       __ZNK3mvk33SPIRVToMSLConversionConfiguration7matchesERKS0_,
++                       _mvkFormatTypeFromMTLPixelFormat, _mvkFormatTypeFromVkFormat,
++                       _mvkMTLBarrierScopeFromVkAccessFlags, _mvkMTLBlendFactorFromVkBlendFactor,
++                       _mvkMTLBlendOperationFromVkBlendOp, _mvkMTLCPUCacheModeFromVkMemoryPropertyFlags,
++                       _mvkMTLClearColorFromVkClearValue, _mvkMTLClearDepthFromVkClearValue,
++                       _mvkMTLClearStencilFromVkClearValue, _mvkMTLColorWriteMaskFromVkChannelFlags,
++                       _mvkMTLCompareFunctionFromVkCompareOp, _mvkMTLCullModeFromVkCullModeFlags,
++                       _mvkMTLIndexTypeFromVkIndexType, _mvkMTLIndexTypeSizeInBytes,
++                       _mvkMTLLoadActionFromVkAttachmentLoadOp, _mvkMTLMultisampleDepthResolveFilterFromVkResolveModeFlagBits,
++                       _mvkMTLMultisampleStencilResolveFilterFromVkResolveModeFlagBits,
++                       _mvkMTLPixelFormatBlockTexelSize, _mvkMTLPixelFormatBytesPerBlock,
++                       _mvkMTLPixelFormatBytesPerLayer, _mvkMTLPixelFormatBytesPerRow,
++                       _mvkMTLPixelFormatBytesPerTexel, _mvkMTLPixelFormatFromVkFormat,
++                       _mvkMTLPixelFormatIsDepthFormat, _mvkMTLPixelFormatIsPVRTCFormat,
++                       _mvkMTLPixelFormatIsStencilFormat, _mvkMTLPixelFormatIsSupported,
++                       _mvkMTLPixelFormatName, _mvkMTLPrimitiveTopologyClassFromVkPrimitiveTopology,
++                       _mvkMTLPrimitiveTypeFromVkPrimitiveTopology, _mvkMTLRenderStagesFromVkPipelineStageFlags,
++                       _mvkMTLResourceOptions, _mvkMTLSamplerAddressModeFromVkSamplerAddressMode,
++                       _mvkMTLSamplerBorderColorFromVkBorderColor, _mvkMTLSamplerMinMagFilterFromVkFilter,
++                       _mvkMTLSamplerMipFilterFromVkSamplerMipmapMode, _mvkMTLScissorRectFromVkRect2D,
++                       _mvkMTLStencilOperationFromVkStencilOp, _mvkMTLStepFunctionFromVkVertexInputRate,
++                       _mvkMTLStorageModeFromVkMemoryPropertyFlags, _mvkMTLStoreActionFromVkAttachmentStoreOp,
++                       _mvkMTLTessellationPartitionModeFromSpvExecutionMode, _mvkMTLTextureSwizzleChannelsFromVkComponentMapping,
++                       _mvkMTLTextureSwizzleFromVkComponentSwizzle, _mvkMTLTextureTypeFromVkImageType,
++                       _mvkMTLTextureTypeFromVkImageViewType, _mvkMTLTextureUsageFromVkImageUsageFlags,
++                       _mvkMTLTriangleFillModeFromVkPolygonMode, _mvkMTLVertexFormatFromVkFormat,
++                       _mvkMTLVertexStepFunctionFromVkVertexInputRate, _mvkMTLViewportFromVkViewport,
++                       _mvkMTLWindingFromSpvExecutionMode, _mvkMTLWindingFromVkFrontFace,
++                       _mvkMipmapBaseSizeFromLevelSize2D, _mvkMipmapBaseSizeFromLevelSize3D,
++                       _mvkMipmapLevelSizeFromBaseSize2D, _mvkMipmapLevelSizeFromBaseSize3D,
++                       _mvkMipmapLevels, _mvkMipmapLevels2D, _mvkMipmapLevels3D,
++                       _mvkSampleCountFromVkSampleCountFlagBits, _mvkShaderStageFromVkShaderStageFlagBits,
++                       _mvkVkFormatBlockTexelSize, _mvkVkFormatBytesPerBlock, _mvkVkFormatBytesPerLayer,
++                       _mvkVkFormatBytesPerRow, _mvkVkFormatBytesPerTexel, _mvkVkFormatFromMTLPixelFormat,
++                       _mvkVkFormatIsSupported, _mvkVkFormatName, _mvkVkFormatProperties,
++                       _mvkVkImageTypeFromMTLTextureType, _mvkVkImageUsageFlagsFromMTLTextureUsage,
++                       _mvkVkSampleCountFlagBitsFromSampleCount, _mvkVkShaderStageFlagBitsFromMVKShaderStage,
++                       _vkAcquireNextImage2KHR, _vkAcquireNextImageKHR, _vkAllocateCommandBuffers,
++                       _vkAllocateDescriptorSets, _vkAllocateMemory, _vkBeginCommandBuffer,
++                       _vkBindBufferMemory, _vkBindBufferMemory2, _vkBindBufferMemory2KHR,
++                       _vkBindImageMemory, _vkBindImageMemory2, _vkBindImageMemory2KHR,
++                       _vkCmdBeginDebugUtilsLabelEXT, _vkCmdBeginQuery, _vkCmdBeginRenderPass,
++                       _vkCmdBeginRenderPass2, _vkCmdBeginRenderPass2KHR, _vkCmdBindDescriptorSets,
++                       _vkCmdBindIndexBuffer, _vkCmdBindPipeline, _vkCmdBindVertexBuffers,
++                       _vkCmdBlitImage, _vkCmdClearAttachments, _vkCmdClearColorImage,
++                       _vkCmdClearDepthStencilImage, _vkCmdCopyBuffer, _vkCmdCopyBufferToImage,
++                       _vkCmdCopyImage, _vkCmdCopyImageToBuffer, _vkCmdCopyQueryPoolResults,
++                       _vkCmdDebugMarkerBeginEXT, _vkCmdDebugMarkerEndEXT, _vkCmdDebugMarkerInsertEXT,
++                       _vkCmdDispatch, _vkCmdDispatchBase, _vkCmdDispatchBaseKHR,
++                       _vkCmdDispatchIndirect, _vkCmdDraw, _vkCmdDrawIndexed, _vkCmdDrawIndexedIndirect,
++                       _vkCmdDrawIndexedIndirectCount, _vkCmdDrawIndexedIndirectCountAMD,
++                       _vkCmdDrawIndexedIndirectCountKHR, _vkCmdDrawIndirect, _vkCmdDrawIndirectCount,
++                       _vkCmdDrawIndirectCountAMD, _vkCmdDrawIndirectCountKHR, _vkCmdEndDebugUtilsLabelEXT,
++                       _vkCmdEndQuery, _vkCmdEndRenderPass, _vkCmdEndRenderPass2,
++                       _vkCmdEndRenderPass2KHR, _vkCmdExecuteCommands, _vkCmdFillBuffer,
++                       _vkCmdInsertDebugUtilsLabelEXT, _vkCmdNextSubpass, _vkCmdNextSubpass2,
++                       _vkCmdNextSubpass2KHR, _vkCmdPipelineBarrier, _vkCmdPushConstants,
++                       _vkCmdPushDescriptorSetKHR, _vkCmdPushDescriptorSetWithTemplateKHR,
++                       _vkCmdResetEvent, _vkCmdResetQueryPool, _vkCmdResolveImage,
++                       _vkCmdSetBlendConstants, _vkCmdSetDepthBias, _vkCmdSetDepthBounds,
++                       _vkCmdSetDeviceMask, _vkCmdSetDeviceMaskKHR, _vkCmdSetEvent,
++                       _vkCmdSetLineWidth, _vkCmdSetScissor, _vkCmdSetStencilCompareMask,
++                       _vkCmdSetStencilReference, _vkCmdSetStencilWriteMask, _vkCmdSetViewport,
++                       _vkCmdUpdateBuffer, _vkCmdWaitEvents, _vkCmdWriteTimestamp,
++                       _vkCreateBuffer, _vkCreateBufferView, _vkCreateCommandPool,
++                       _vkCreateComputePipelines, _vkCreateDebugReportCallbackEXT,
++                       _vkCreateDebugUtilsMessengerEXT, _vkCreateDescriptorPool,
++                       _vkCreateDescriptorSetLayout, _vkCreateDescriptorUpdateTemplate,
++                       _vkCreateDescriptorUpdateTemplateKHR, _vkCreateDevice, _vkCreateEvent,
++                       _vkCreateFence, _vkCreateFramebuffer, _vkCreateGraphicsPipelines,
++                       _vkCreateIOSSurfaceMVK, _vkCreateImage, _vkCreateImageView,
++                       _vkCreateInstance, _vkCreateMetalSurfaceEXT, _vkCreatePipelineCache,
++                       _vkCreatePipelineLayout, _vkCreatePrivateDataSlotEXT, _vkCreateQueryPool,
++                       _vkCreateRenderPass, _vkCreateRenderPass2, _vkCreateRenderPass2KHR,
++                       _vkCreateSampler, _vkCreateSamplerYcbcrConversion, _vkCreateSamplerYcbcrConversionKHR,
++                       _vkCreateSemaphore, _vkCreateShaderModule, _vkCreateSwapchainKHR,
++                       _vkDebugMarkerSetObjectNameEXT, _vkDebugMarkerSetObjectTagEXT,
++                       _vkDebugReportMessageEXT, _vkDestroyBuffer, _vkDestroyBufferView,
++                       _vkDestroyCommandPool, _vkDestroyDebugReportCallbackEXT, _vkDestroyDebugUtilsMessengerEXT,
++                       _vkDestroyDescriptorPool, _vkDestroyDescriptorSetLayout, _vkDestroyDescriptorUpdateTemplate,
++                       _vkDestroyDescriptorUpdateTemplateKHR, _vkDestroyDevice, _vkDestroyEvent,
++                       _vkDestroyFence, _vkDestroyFramebuffer, _vkDestroyImage, _vkDestroyImageView,
++                       _vkDestroyInstance, _vkDestroyPipeline, _vkDestroyPipelineCache,
++                       _vkDestroyPipelineLayout, _vkDestroyPrivateDataSlotEXT, _vkDestroyQueryPool,
++                       _vkDestroyRenderPass, _vkDestroySampler, _vkDestroySamplerYcbcrConversion,
++                       _vkDestroySamplerYcbcrConversionKHR, _vkDestroySemaphore,
++                       _vkDestroyShaderModule, _vkDestroySurfaceKHR, _vkDestroySwapchainKHR,
++                       _vkDeviceWaitIdle, _vkEndCommandBuffer, _vkEnumerateDeviceExtensionProperties,
++                       _vkEnumerateDeviceLayerProperties, _vkEnumerateInstanceExtensionProperties,
++                       _vkEnumerateInstanceLayerProperties, _vkEnumerateInstanceVersion,
++                       _vkEnumeratePhysicalDeviceGroups, _vkEnumeratePhysicalDeviceGroupsKHR,
++                       _vkEnumeratePhysicalDevices, _vkExportMetalObjectsEXT, _vkFlushMappedMemoryRanges,
++                       _vkFreeCommandBuffers, _vkFreeDescriptorSets, _vkFreeMemory,
++                       _vkGetBufferDeviceAddress, _vkGetBufferDeviceAddressEXT, _vkGetBufferDeviceAddressKHR,
++                       _vkGetBufferMemoryRequirements, _vkGetBufferMemoryRequirements2,
++                       _vkGetBufferMemoryRequirements2KHR, _vkGetBufferOpaqueCaptureAddress,
++                       _vkGetBufferOpaqueCaptureAddressKHR, _vkGetDescriptorSetLayoutSupport,
++                       _vkGetDescriptorSetLayoutSupportKHR, _vkGetDeviceGroupPeerMemoryFeatures,
++                       _vkGetDeviceGroupPeerMemoryFeaturesKHR, _vkGetDeviceGroupPresentCapabilitiesKHR,
++                       _vkGetDeviceGroupSurfacePresentModesKHR, _vkGetDeviceMemoryCommitment,
++                       _vkGetDeviceMemoryOpaqueCaptureAddress, _vkGetDeviceMemoryOpaqueCaptureAddressKHR,
++                       _vkGetDeviceProcAddr, _vkGetDeviceQueue, _vkGetDeviceQueue2,
++                       _vkGetEventStatus, _vkGetFenceStatus, _vkGetIOSurfaceMVK,
++                       _vkGetImageMemoryRequirements, _vkGetImageMemoryRequirements2,
++                       _vkGetImageMemoryRequirements2KHR, _vkGetImageSparseMemoryRequirements,
++                       _vkGetImageSparseMemoryRequirements2, _vkGetImageSparseMemoryRequirements2KHR,
++                       _vkGetImageSubresourceLayout, _vkGetInstanceProcAddr, _vkGetMTLBufferMVK,
++                       _vkGetMTLCommandQueueMVK, _vkGetMTLDeviceMVK, _vkGetMTLTextureMVK,
++                       _vkGetMoltenVKConfigurationMVK, _vkGetPastPresentationTimingGOOGLE,
++                       _vkGetPerformanceStatisticsMVK, _vkGetPhysicalDeviceExternalBufferProperties,
++                       _vkGetPhysicalDeviceExternalBufferPropertiesKHR, _vkGetPhysicalDeviceExternalFenceProperties,
++                       _vkGetPhysicalDeviceExternalFencePropertiesKHR, _vkGetPhysicalDeviceExternalSemaphoreProperties,
++                       _vkGetPhysicalDeviceExternalSemaphorePropertiesKHR, _vkGetPhysicalDeviceFeatures,
++                       _vkGetPhysicalDeviceFeatures2, _vkGetPhysicalDeviceFeatures2KHR,
++                       _vkGetPhysicalDeviceFormatProperties, _vkGetPhysicalDeviceFormatProperties2,
++                       _vkGetPhysicalDeviceFormatProperties2KHR, _vkGetPhysicalDeviceImageFormatProperties,
++                       _vkGetPhysicalDeviceImageFormatProperties2, _vkGetPhysicalDeviceImageFormatProperties2KHR,
++                       _vkGetPhysicalDeviceMemoryProperties, _vkGetPhysicalDeviceMemoryProperties2,
++                       _vkGetPhysicalDeviceMemoryProperties2KHR, _vkGetPhysicalDeviceMetalFeaturesMVK,
++                       _vkGetPhysicalDevicePresentRectanglesKHR, _vkGetPhysicalDeviceProperties,
++                       _vkGetPhysicalDeviceProperties2, _vkGetPhysicalDeviceProperties2KHR,
++                       _vkGetPhysicalDeviceQueueFamilyProperties, _vkGetPhysicalDeviceQueueFamilyProperties2,
++                       _vkGetPhysicalDeviceQueueFamilyProperties2KHR, _vkGetPhysicalDeviceSparseImageFormatProperties,
++                       _vkGetPhysicalDeviceSparseImageFormatProperties2, _vkGetPhysicalDeviceSparseImageFormatProperties2KHR,
++                       _vkGetPhysicalDeviceSurfaceCapabilities2KHR, _vkGetPhysicalDeviceSurfaceCapabilitiesKHR,
++                       _vkGetPhysicalDeviceSurfaceFormats2KHR, _vkGetPhysicalDeviceSurfaceFormatsKHR,
++                       _vkGetPhysicalDeviceSurfacePresentModesKHR, _vkGetPhysicalDeviceSurfaceSupportKHR,
++                       _vkGetPipelineCacheData, _vkGetPrivateDataEXT, _vkGetQueryPoolResults,
++                       _vkGetRefreshCycleDurationGOOGLE, _vkGetRenderAreaGranularity,
++                       _vkGetSemaphoreCounterValue, _vkGetSemaphoreCounterValueKHR,
++                       _vkGetSwapchainImagesKHR, _vkGetVersionStringsMVK, _vkInvalidateMappedMemoryRanges,
++                       _vkMapMemory, _vkMergePipelineCaches, _vkQueueBeginDebugUtilsLabelEXT,
++                       _vkQueueBindSparse, _vkQueueEndDebugUtilsLabelEXT, _vkQueueInsertDebugUtilsLabelEXT,
++                       _vkQueuePresentKHR, _vkQueueSubmit, _vkQueueWaitIdle, _vkResetCommandBuffer,
++                       _vkResetCommandPool, _vkResetDescriptorPool, _vkResetEvent,
++                       _vkResetFences, _vkResetQueryPool, _vkResetQueryPoolEXT, _vkSetDebugUtilsObjectNameEXT,
++                       _vkSetDebugUtilsObjectTagEXT, _vkSetEvent, _vkSetHdrMetadataEXT,
++                       _vkSetMTLTextureMVK, _vkSetMoltenVKConfigurationMVK, _vkSetPrivateDataEXT,
++                       _vkSetWorkgroupSizeMVK, _vkSignalSemaphore, _vkSignalSemaphoreKHR,
++                       _vkSubmitDebugUtilsMessageEXT, _vkTrimCommandPool, _vkTrimCommandPoolKHR,
++                       _vkUnmapMemory, _vkUpdateDescriptorSetWithTemplate, _vkUpdateDescriptorSetWithTemplateKHR,
++                       _vkUpdateDescriptorSets, _vkUseIOSurfaceMVK, _vkWaitForFences,
++                       _vkWaitSemaphores, _vkWaitSemaphoresKHR, _vk_icdGetInstanceProcAddr,
++                       _vk_icdGetPhysicalDeviceProcAddr, _vk_icdNegotiateLoaderICDInterfaceVersion ]
++...
+diff --git a/include/GL/osmesa.h b/include/GL/osmesa.h
+index 39cd54e..866d5a4 100644
+--- a/include/GL/osmesa.h
++++ b/include/GL/osmesa.h
+@@ -324,6 +324,14 @@ OSMesaPostprocess(OSMesaContext osmesa, const char *filter,
+                   unsigned enable_value);
+ 
+ 
++
++/**
++ * Flush the front buffer.
++ */
++GLAPI void GLAPIENTRY
++OSMesaFlushFrontbuffer(void);
++
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/ios-aarch64 b/ios-aarch64
+new file mode 100644
+index 0000000..e2f88e4
+--- /dev/null
++++ b/ios-aarch64
+@@ -0,0 +1,19 @@
++[binaries]
++
++ar = 'ar'
++c = ['ccache', 'clang', '-O3', '-DVK_USE_PLATFORM_IOS_MVK', '-DVK_USE_PLATFORM_METAL_EXT', '-DVK_ENABLE_BETA_EXTENSIONS', '-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=12.0', '-fPIC']
++cpp = ['ccache', 'clang++', '-O3', '-DVK_USE_PLATFORM_IOS_MVK', '-DVK_USE_PLATFORM_METAL_EXT', '-DVK_ENABLE_BETA_EXTENSIONS', '-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=12.0', '-fPIC', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
++c_ld = 'ld'
++cpp_ld = 'ld'
++strip = 'strip'
++# Android doesn't come with a pkg-config, but we need one for meson to be happy not
++# finding all the optional deps it looks for.  Use system pkg-config pointing at a
++# directory we get to populate with any .pc files we want to add for Android
++pkgconfig = 'pkg-config'
++
++[host_machine]
++# or linux?
++system = 'darwin'
++cpu_family = 'arm'
++cpu = 'armv8'
++endian = 'little'
+diff --git a/log.pc b/log.pc
+new file mode 100644
+index 0000000..235f45c
+--- /dev/null
++++ b/log.pc
+@@ -0,0 +1,4 @@
++Name: log
++Description: Android liblog library
++Version: 1.0
++Libs: -llog
+diff --git a/meson.build b/meson.build
+index 305b34d..f37e471 100644
+--- a/meson.build
++++ b/meson.build
+@@ -270,7 +270,8 @@ with_libclc = with_clc
+ with_spirv_to_dxil = get_option('spirv-to-dxil')
+ 
+ if host_machine.system() == 'darwin'
+-  with_dri_platform = 'apple'
++  with_dri_platform = 'none'
++  # 'apple'
+   pre_args += '-DBUILDING_MESA'
+ elif ['windows', 'cygwin'].contains(host_machine.system())
+   with_dri_platform = 'windows'
+@@ -444,7 +445,7 @@ endif
+ 
+ if with_glx != 'disabled'
+   if not (with_platform_x11 and with_any_opengl)
+-    error('Cannot build GLX support without X11 platform support and at least one OpenGL API')
++    warning('Cannot build GLX support without X11 platform support and at least one OpenGL API')
+   elif with_glx == 'xlib'
+     if not with_gallium
+       error('xlib based GLX requires at least one gallium driver')
+@@ -1579,7 +1580,7 @@ if system_has_kms_drm
+   dep_libdrm = dependency(
+     'libdrm', version : '>=' + _drm_ver,
+     # GNU/Hurd includes egl_dri2, without drm.
+-    required : (with_dri2 and host_machine.system() != 'gnu') or with_dri3
++    required : not with_platform_android and ((with_dri2 and host_machine.system() != 'gnu') or with_dri3)
+   )
+ else
+   # We should prevent libdrm from being available when the target doesn't have it to avoid transitive
+@@ -1876,7 +1877,7 @@ endif
+ 
+ if with_osmesa
+   if not with_gallium_softpipe
+-    error('OSMesa gallium requires gallium softpipe or llvmpipe.')
++    warning('OSMesa gallium requires gallium softpipe or llvmpipe.')
+   endif
+   if host_machine.system() == 'windows'
+     osmesa_lib_name = 'osmesa'
+@@ -1939,7 +1940,7 @@ if host_machine.cpu_family() == 'x86_64' and cc.get_id() == 'gcc'
+ endif
+ 
+ with_dri3_modifiers = false
+-if with_platform_x11
++if with_platform_x11 and host_machine.system() != 'darwin'
+   if with_glx == 'xlib'
+     dep_x11 = dependency('x11')
+     dep_xext = dependency('xext')
+diff --git a/nativewindow.pc b/nativewindow.pc
+new file mode 100644
+index 0000000..cfe23c0
+--- /dev/null
++++ b/nativewindow.pc
+@@ -0,0 +1,4 @@
++Name: nativewindow
++Description: Android libnativewindow library
++Version: 1.0
++Libs:
+diff --git a/src/android_stub/meson.build b/src/android_stub/meson.build
+index 6097ae8..2c321c7 100644
+--- a/src/android_stub/meson.build
++++ b/src/android_stub/meson.build
+@@ -17,5 +17,10 @@ if with_android_stub
+ 
+   dep_android = declare_dependency(
+     link_with : stub_libs,
++    dependencies : [
++      dependency('log'),
++      dependency('sync'),
++      dependency('nativewindow'),
++    ]
+   )
+ endif
+diff --git a/src/gallium/auxiliary/target-helpers/inline_sw_helper.h b/src/gallium/auxiliary/target-helpers/inline_sw_helper.h
+index d821008..457b2d8 100644
+--- a/src/gallium/auxiliary/target-helpers/inline_sw_helper.h
++++ b/src/gallium/auxiliary/target-helpers/inline_sw_helper.h
+@@ -33,6 +33,10 @@
+ #include "asahi/agx_public.h"
+ #endif
+ 
++#ifdef GALLIUM_ZINK
++#include "zink/zink_public.h"
++#endif
++
+ static inline struct pipe_screen *
+ sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
+ {
+@@ -92,6 +96,9 @@ sw_screen_create_vk(struct sw_winsys *winsys, bool sw_vk)
+ #endif
+ #if defined(GALLIUM_SOFTPIPE)
+       (sw_vk ? "" : "softpipe"),
++#endif
++#if defined(GALLIUM_ZINK)
++      (sw_vk || only_sw) ? "" : "zink",
+ #endif
+    };
+ 
+diff --git a/src/gallium/drivers/zink/zink_instance.py b/src/gallium/drivers/zink/zink_instance.py
+index c3bd231..e3ea170 100644
+--- a/src/gallium/drivers/zink/zink_instance.py
++++ b/src/gallium/drivers/zink/zink_instance.py
+@@ -42,6 +42,8 @@ EXTENSIONS = [
+     Extension("VK_MVK_moltenvk",
+         nonstandard=True),
+     Extension("VK_KHR_surface"),
++    Extension("VK_KHR_android_surface"),
++    Extension("VK_EXT_metal_surface"),
+     Extension("VK_EXT_headless_surface"),
+     Extension("VK_KHR_wayland_surface"),
+     Extension("VK_KHR_xcb_surface",
+diff --git a/src/gallium/drivers/zink/zink_kopper.c b/src/gallium/drivers/zink/zink_kopper.c
+index 09ca173..850ebe5 100644
+--- a/src/gallium/drivers/zink/zink_kopper.c
++++ b/src/gallium/drivers/zink/zink_kopper.c
+@@ -55,6 +55,16 @@ init_dt_type(struct kopper_displaytarget *cdt)
+ {
+    VkStructureType type = cdt->info.bos.sType;
+    switch (type) {
++#ifdef VK_USE_PLATFORM_ANDROID_KHR
++    case VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR:
++       cdt->type = KOPPER_ANDROID;
++       break;
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++    case VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT:
++       cdt->type = KOPPER_METAL;
++       break;
++#endif
+ #ifdef VK_USE_PLATFORM_XCB_KHR
+    case VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR:
+       cdt->type = KOPPER_X11;
+@@ -84,6 +94,16 @@ kopper_CreateSurface(struct zink_screen *screen, struct kopper_displaytarget *cd
+    init_dt_type(cdt);
+    VkStructureType type = cdt->info.bos.sType;
+    switch (type) {
++#ifdef VK_USE_PLATFORM_ANDROID_KHR
++    case VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR:
++       error = VKSCR(CreateAndroidSurfaceKHR)(screen->instance, (VkAndroidSurfaceCreateInfoKHR *)&cdt->info.bos, NULL, &surface);
++       break;
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++    case VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT:
++       error = VKSCR(CreateMetalSurfaceEXT)(screen->instance, (VkMetalSurfaceCreateInfoEXT *)&cdt->info.bos, NULL, &surface);
++       break;
++#endif
+ #ifdef VK_USE_PLATFORM_XCB_KHR
+    case VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR: {
+       VkXcbSurfaceCreateInfoKHR *xcb = (VkXcbSurfaceCreateInfoKHR *)&cdt->info.bos;
+@@ -127,7 +147,7 @@ kopper_CreateSurface(struct zink_screen *screen, struct kopper_displaytarget *cd
+       /* VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR and VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR
+       * are not handled
+       */
+-      assert(modes[i] <= VK_PRESENT_MODE_FIFO_RELAXED_KHR);
++      //assert(modes[i] <= VK_PRESENT_MODE_FIFO_RELAXED_KHR);
+       if (modes[i] <= VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+          cdt->present_modes |= BITFIELD_BIT(modes[i]);
+    }
+@@ -181,6 +201,18 @@ find_dt_entry(struct zink_screen *screen, const struct kopper_displaytarget *cdt
+ {
+    struct hash_entry *he = NULL;
+    switch (cdt->type) {
++#ifdef VK_USE_PLATFORM_ANDROID_KHR
++   case KOPPER_ANDROID:
++      VkAndroidSurfaceCreateInfoKHR *android = (VkAndroidSurfaceCreateInfoKHR*)&cdt->info.bos;
++      he = _mesa_hash_table_search(&screen->dts, android->window);
++      break;
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++   case KOPPER_METAL:
++      VkMetalSurfaceCreateInfoEXT *metal = (VkMetalSurfaceCreateInfoEXT*)&cdt->info.bos;
++      he = _mesa_hash_table_search(&screen->dts, metal->pLayer);
++      break;
++#endif
+ #ifdef VK_USE_PLATFORM_XCB_KHR
+    case KOPPER_X11: {
+       VkXcbSurfaceCreateInfoKHR *xcb = (VkXcbSurfaceCreateInfoKHR *)&cdt->info.bos;
+@@ -278,6 +310,8 @@ kopper_CreateSwapchain(struct zink_screen *screen, struct kopper_displaytarget *
+       cswap->scci.imageExtent.width = cdt->caps.currentExtent.width;
+       cswap->scci.imageExtent.height = cdt->caps.currentExtent.height;
+       break;
++   case KOPPER_ANDROID:
++   case KOPPER_METAL:
+    case KOPPER_WAYLAND:
+       /* On Wayland, currentExtent is the special value (0xFFFFFFFF, 0xFFFFFFFF), indicating that the
+        * surface size will be determined by the extent of a swapchain targeting the surface. Whatever the
+@@ -382,6 +416,8 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
+          case KOPPER_X11:
+             _mesa_hash_table_init(&screen->dts, screen, NULL, _mesa_key_pointer_equal);
+             break;
++         case KOPPER_ANDROID:
++         case KOPPER_METAL:
+          case KOPPER_WAYLAND:
+          case KOPPER_WIN32:
+             _mesa_hash_table_init(&screen->dts, screen, _mesa_hash_pointer, _mesa_key_pointer_equal);
+@@ -436,6 +472,18 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
+ 
+    simple_mtx_lock(&screen->dt_lock);
+    switch (cdt->type) {
++#ifdef VK_USE_PLATFORM_ANDROID_KHR
++   case KOPPER_ANDROID:
++      VkAndroidSurfaceCreateInfoKHR *android = (VkAndroidSurfaceCreateInfoKHR*)&cdt->info.bos;
++      _mesa_hash_table_insert(&screen->dts, android->window, cdt);
++      break;
++#endif
++#ifdef VK_USE_PLATFORM_METAL_EXT
++   case KOPPER_METAL:
++      VkMetalSurfaceCreateInfoEXT *metal = (VkMetalSurfaceCreateInfoEXT*)&cdt->info.bos;
++      _mesa_hash_table_insert(&screen->dts, metal->pLayer, cdt);
++      break;
++#endif
+ #ifdef VK_USE_PLATFORM_XCB_KHR
+    case KOPPER_X11: {
+       VkXcbSurfaceCreateInfoKHR *xcb = (VkXcbSurfaceCreateInfoKHR *)&cdt->info.bos;
+diff --git a/src/gallium/drivers/zink/zink_kopper.h b/src/gallium/drivers/zink/zink_kopper.h
+index 857a9cd..c336da3 100644
+--- a/src/gallium/drivers/zink/zink_kopper.h
++++ b/src/gallium/drivers/zink/zink_kopper.h
+@@ -60,6 +60,8 @@ struct kopper_swapchain {
+ };
+ 
+ enum kopper_type {
++   KOPPER_ANDROID,
++   KOPPER_METAL,
+    KOPPER_X11,
+    KOPPER_WAYLAND,
+    KOPPER_WIN32
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 8825f07..37f2662 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -2814,7 +2814,11 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
+    if (screen->info.have_EXT_calibrated_timestamps && !check_have_device_time(screen))
+       goto fail;
+ 
+-   screen->have_triangle_fans = true;
++   #ifndef __APPLE__
++    screen->have_triangle_fans = true;
++   #else
++    screen->have_triangle_fans = false;
++   #endif
+ #if defined(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)
+    if (screen->info.have_KHR_portability_subset) {
+       screen->have_triangle_fans = (VK_TRUE == screen->info.portability_subset_feats.triangleFans);
+diff --git a/src/gallium/frontends/dri/empty.c b/src/gallium/frontends/dri/empty.c
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/gallium/frontends/dri/meson.build b/src/gallium/frontends/dri/meson.build
+index 6009322..87b9e6c 100644
+--- a/src/gallium/frontends/dri/meson.build
++++ b/src/gallium/frontends/dri/meson.build
+@@ -61,7 +61,7 @@ endif
+ 
+ libdri = static_library(
+   'dri',
+-  [ files_libdri, sha1_h ],
++  with_platform_android or host_machine.system() == 'darwin' ? ['empty.c'] : [ files_libdri, sha1_h ],
+   include_directories : [
+     inc_include, inc_util, inc_mesa, inc_mapi, inc_src, inc_gallium,
+     inc_gallium_aux, inc_util,  inc_gallium_drivers,
+diff --git a/src/gallium/frontends/osmesa/meson.build b/src/gallium/frontends/osmesa/meson.build
+index 721ecd6..1cb2a21 100644
+--- a/src/gallium/frontends/osmesa/meson.build
++++ b/src/gallium/frontends/osmesa/meson.build
+@@ -27,10 +27,10 @@ endif
+ 
+ libosmesa_st = static_library(
+   'osmesa_st',
+-  'osmesa.c',
++  'osmesa_bufferless.c',
+   c_args : osmesa_st_c_args,
+   include_directories : [
+-    inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
++    inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_mapi, inc_mesa,
+   ],
+   dependencies : [idep_mesautil],
+ )
+diff --git a/src/gallium/frontends/osmesa/osmesa_bufferless.c b/src/gallium/frontends/osmesa/osmesa_bufferless.c
+new file mode 100644
+index 0000000..8361938
+--- /dev/null
++++ b/src/gallium/frontends/osmesa/osmesa_bufferless.c
+@@ -0,0 +1,1094 @@
++/*
++ * Copyright (c) 2013  Brian Paul   All Rights Reserved.
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included
++ * in all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
++ * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
++ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
++ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
++ * OTHER DEALINGS IN THE SOFTWARE.
++ */
++
++
++/*
++ * Off-Screen rendering into client memory.
++ * OpenGL gallium frontend for softpipe and llvmpipe.
++ *
++ * Notes:
++ *
++ * If Gallium is built with LLVM support we use the llvmpipe driver.
++ * Otherwise we use softpipe.  The GALLIUM_DRIVER environment variable
++ * may be set to "softpipe" or "llvmpipe" to override.
++ *
++ * With softpipe we could render directly into the user's buffer by using a
++ * display target resource.  However, softpipe doesn't support "upside-down"
++ * rendering which would be needed for the OSMESA_Y_UP=TRUE case.
++ *
++ * With llvmpipe we could only render directly into the user's buffer when its
++ * width and height is a multiple of the tile size (64 pixels).
++ *
++ * Because of these constraints we always render into ordinary resources then
++ * copy the results to the user's buffer in the flush_front() function which
++ * is called when the app calls glFlush/Finish.
++ *
++ * In general, the OSMesa interface is pretty ugly and not a good match
++ * for Gallium.  But we're interested in doing the best we can to preserve
++ * application portability.  With a little work we could come up with a
++ * much nicer, new off-screen Gallium interface...
++ */
++
++
++#include <stdio.h>
++#include <c11/threads.h>
++#include "GL/osmesa.h"
++
++#include "glapi/glapi.h"  /* for OSMesaGetProcAddress below */
++
++#include "pipe/p_context.h"
++#include "pipe/p_screen.h"
++#include "pipe/p_state.h"
++
++#include "util/u_atomic.h"
++#include "util/u_box.h"
++#include "util/u_debug.h"
++#include "util/format/u_format.h"
++#include "util/u_inlines.h"
++#include "util/u_memory.h"
++
++#include "postprocess/filters.h"
++#include "postprocess/postprocess.h"
++
++#include "frontend/api.h"
++#include "state_tracker/st_gl_api.h"
++
++#define GALLIUM_ZINK
++#ifdef GALLIUM_ZINK
++#include "kopper_interface.h"
++struct zink_screen {
++   struct pipe_screen base;
++};
++#endif
++
++
++
++extern struct pipe_screen *
++osmesa_create_screen(void);
++
++
++
++struct osmesa_buffer
++{
++   struct st_framebuffer_iface *stfb;
++   struct st_visual visual;
++   unsigned width, height;
++
++   struct pipe_resource *textures[ST_ATTACHMENT_COUNT];
++
++   void *map;
++
++   struct osmesa_buffer *next;  /**< next in linked list */
++};
++
++
++struct osmesa_context
++{
++   struct st_context_iface *stctx;
++
++   boolean ever_used;     /*< Has this context ever been current? */
++
++   struct osmesa_buffer *current_buffer;
++
++   /* Storage for depth/stencil, if the user has requested access.  The backing
++    * driver always has its own storage for the actual depth/stencil, which we
++    * have to transfer in and out.
++    */
++   void *zs;
++   unsigned zs_stride;
++
++   enum pipe_format depth_stencil_format, accum_format;
++
++   GLenum format;         /*< User-specified context format */
++   GLenum type;           /*< Buffer's data type */
++   GLint user_row_length; /*< user-specified number of pixels per row */
++   GLboolean y_up;        /*< TRUE  -> Y increases upward */
++                          /*< FALSE -> Y increases downward */
++
++   /** Which postprocessing filters are enabled. */
++   unsigned pp_enabled[PP_FILTERS];
++   struct pp_queue_t *pp;
++};
++
++/**
++ * Called from the ST manager.
++ */
++static int
++osmesa_st_get_param(struct st_manager *smapi, enum st_manager_param param)
++{
++   /* no-op */
++   return 0;
++}
++
++static struct st_manager *stmgr = NULL;
++static struct st_api *stapi = NULL;
++
++static void
++destroy_st_manager(void)
++{
++   if (stmgr) {
++      if (stmgr->screen)
++         stmgr->screen->destroy(stmgr->screen);
++      FREE(stmgr);
++   }
++
++   if (stapi && stapi->destroy) {
++      stapi->destroy(stapi);
++   }
++}
++
++static void
++create_st_manager(void)
++{
++   if (atexit(destroy_st_manager) != 0)
++      return;
++
++   stmgr = CALLOC_STRUCT(st_manager);
++   if (stmgr) {
++      stmgr->screen = osmesa_create_screen();
++      stmgr->get_param = osmesa_st_get_param;
++      stmgr->get_egl_image = NULL;
++   }
++
++   stapi = st_gl_api_create();
++}
++
++/**
++ * Create/return a singleton st_manager object.
++ */
++static struct st_manager *
++get_st_manager(void)
++{
++   static once_flag create_once_flag = ONCE_FLAG_INIT;
++
++   call_once(&create_once_flag, create_st_manager);
++
++   return stmgr;
++}
++
++/**
++ * Create/return singleton st_api object.
++ */
++static struct st_api *
++get_st_api(void)
++{
++   get_st_manager();
++   return stapi;
++}
++
++/**
++ * Given an OSMESA_x format and a GL_y type, return the best
++ * matching PIPE_FORMAT_z.
++ * Note that we can't exactly match all user format/type combinations
++ * with gallium formats.  If we find this to be a problem, we can
++ * implement more elaborate format/type conversion in the flush_front()
++ * function.
++ */
++static enum pipe_format
++osmesa_choose_format(GLenum format, GLenum type)
++{
++   switch (format) {
++   case OSMESA_RGBA:
++      if (type == GL_UNSIGNED_BYTE) {
++#if UTIL_ARCH_LITTLE_ENDIAN
++         return PIPE_FORMAT_R8G8B8A8_UNORM;
++#else
++         return PIPE_FORMAT_A8B8G8R8_UNORM;
++#endif
++      }
++      else if (type == GL_UNSIGNED_SHORT) {
++         return PIPE_FORMAT_R16G16B16A16_UNORM;
++      }
++      else if (type == GL_FLOAT) {
++         return PIPE_FORMAT_R32G32B32A32_FLOAT;
++      }
++      else {
++         return PIPE_FORMAT_NONE;
++      }
++      break;
++   case OSMESA_BGRA:
++      if (type == GL_UNSIGNED_BYTE) {
++#if UTIL_ARCH_LITTLE_ENDIAN
++         return PIPE_FORMAT_B8G8R8A8_UNORM;
++#else
++         return PIPE_FORMAT_A8R8G8B8_UNORM;
++#endif
++      }
++      else if (type == GL_UNSIGNED_SHORT) {
++         return PIPE_FORMAT_R16G16B16A16_UNORM;
++      }
++      else if (type == GL_FLOAT) {
++         return PIPE_FORMAT_R32G32B32A32_FLOAT;
++      }
++      else {
++         return PIPE_FORMAT_NONE;
++      }
++      break;
++   case OSMESA_ARGB:
++      if (type == GL_UNSIGNED_BYTE) {
++#if UTIL_ARCH_LITTLE_ENDIAN
++         return PIPE_FORMAT_A8R8G8B8_UNORM;
++#else
++         return PIPE_FORMAT_B8G8R8A8_UNORM;
++#endif
++      }
++      else if (type == GL_UNSIGNED_SHORT) {
++         return PIPE_FORMAT_R16G16B16A16_UNORM;
++      }
++      else if (type == GL_FLOAT) {
++         return PIPE_FORMAT_R32G32B32A32_FLOAT;
++      }
++      else {
++         return PIPE_FORMAT_NONE;
++      }
++      break;
++   case OSMESA_RGB:
++      if (type == GL_UNSIGNED_BYTE) {
++         return PIPE_FORMAT_R8G8B8_UNORM;
++      }
++      else if (type == GL_UNSIGNED_SHORT) {
++         return PIPE_FORMAT_R16G16B16_UNORM;
++      }
++      else if (type == GL_FLOAT) {
++         return PIPE_FORMAT_R32G32B32_FLOAT;
++      }
++      else {
++         return PIPE_FORMAT_NONE;
++      }
++      break;
++   case OSMESA_BGR:
++      /* No gallium format for this one */
++      return PIPE_FORMAT_NONE;
++   case OSMESA_RGB_565:
++      if (type != GL_UNSIGNED_SHORT_5_6_5)
++         return PIPE_FORMAT_NONE;
++      return PIPE_FORMAT_B5G6R5_UNORM;
++   default:
++      return PIPE_FORMAT_NONE;
++   }
++}
++
++
++/**
++ * Initialize an st_visual object.
++ */
++static void
++osmesa_init_st_visual(struct st_visual *vis,
++                      enum pipe_format color_format,
++                      enum pipe_format ds_format,
++                      enum pipe_format accum_format)
++{
++   vis->buffer_mask = ST_ATTACHMENT_FRONT_LEFT_MASK | ST_ATTACHMENT_BACK_LEFT_MASK;
++
++   if (ds_format != PIPE_FORMAT_NONE)
++      vis->buffer_mask |= ST_ATTACHMENT_DEPTH_STENCIL_MASK;
++   if (accum_format != PIPE_FORMAT_NONE)
++      vis->buffer_mask |= ST_ATTACHMENT_ACCUM;
++
++   vis->color_format = color_format;
++   vis->depth_stencil_format = ds_format;
++   vis->accum_format = accum_format;
++   vis->samples = 1;
++}
++
++
++/**
++ * Return the osmesa_buffer that corresponds to an st_framebuffer_iface.
++ */
++static inline struct osmesa_buffer *
++stfbi_to_osbuffer(struct st_framebuffer_iface *stfbi)
++{
++   return (struct osmesa_buffer *) stfbi->st_manager_private;
++}
++
++
++/**
++ * Called via glFlush/glFinish.  This is where we copy the contents
++ * of the driver's color buffer into the user-specified buffer.
++ */
++static bool
++osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
++                                  struct st_framebuffer_iface *stfbi,
++                                  enum st_attachment_type statt)
++{
++   OSMesaContext osmesa = OSMesaGetCurrentContext();
++   struct osmesa_buffer *osbuffer = stfbi_to_osbuffer(stfbi);
++   struct pipe_resource *res = osbuffer->textures[statt];
++//   unsigned bpp;
++//   int dst_stride;
++
++   if (statt != ST_ATTACHMENT_BACK_LEFT)
++      return false;
++
++   if (osmesa->pp) {
++      struct pipe_resource *zsbuf = NULL;
++      unsigned i;
++
++      /* Find the z/stencil buffer if there is one */
++      for (i = 0; i < ARRAY_SIZE(osbuffer->textures); i++) {
++         struct pipe_resource *res = osbuffer->textures[i];
++         if (res) {
++            const struct util_format_description *desc =
++               util_format_description(res->format);
++
++            if (util_format_has_depth(desc)) {
++               zsbuf = res;
++               break;
++            }
++         }
++      }
++
++      /* run the postprocess stage(s) */
++      //pp_run(osmesa->pp, res, res, zsbuf);
++   }
++
++   //assert(!"FIXME: swap the swapchain");
++   struct pipe_screen *screen = get_st_manager()->screen;
++
++   //printf("BACK_LEFT: %p\n", osbuffer->textures[ST_ATTACHMENT_BACK_LEFT]);
++   //printf("FRONT_LEFT: %p\n", osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT]);
++
++   //osmesa_st_framebuffer_flush_front
++
++   //printf("screen->flush_frontbuffer = %p\n", screen->flush_frontbuffer);
++   stctx->pipe->flush_resource(stctx->pipe, res); //osbuffer->textures[ST_ATTACHMENT_BACK_LEFT]
++   ((struct zink_screen *)screen)->base.flush_frontbuffer(screen, stctx->pipe, res, 0, 0, NULL /* drawable */, NULL /* sub_box */);
++
++   osbuffer->textures[ST_ATTACHMENT_BACK_LEFT] = osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT];
++   osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT] = res;
++
++   /* Snapshot the color buffer to the user's buffer. */
++//   bpp = util_format_get_blocksize(osbuffer->visual.color_format);
++//   if (osmesa->user_row_length)
++//      dst_stride = bpp * osmesa->user_row_length;
++//   else
++//      dst_stride = bpp * osbuffer->width;
++
++//   osmesa_read_buffer(osmesa, res, osbuffer->map, dst_stride, osmesa->y_up);
++
++   /* If the user has requested the Z/S buffer, then snapshot that one too. */
++//   if (osmesa->zs) {
++//      osmesa_read_buffer(osmesa, osbuffer->textures[ST_ATTACHMENT_DEPTH_STENCIL],
++//                         osmesa->zs, osmesa->zs_stride, true);
++//   }
++
++   return true;
++}
++
++
++#ifdef GALLIUM_ZINK
++static void
++osmesa_fill_private_loader_data(struct osmesa_buffer *osbuffer, struct kopper_loader_info *out)
++{
++#ifdef __ANDROID__
++   out->android.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
++   out->android.pNext = NULL;
++   out->android.flags = 0;
++   out->android.window = osbuffer->map;
++#else
++   out->metal.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
++   out->metal.pNext = NULL;
++   out->metal.flags = 0;
++   out->metal.pLayer = osbuffer->map;
++#endif
++   assert(osbuffer->map);
++   //printf("osbuffer->map is %p\n", osbuffer->map);
++}
++#endif
++
++
++/**
++ * Called by the st manager to validate the framebuffer (allocate
++ * its resources).
++ */
++static bool
++osmesa_st_framebuffer_validate(struct st_context_iface *stctx,
++                               struct st_framebuffer_iface *stfbi,
++                               const enum st_attachment_type *statts,
++                               unsigned count,
++                               struct pipe_resource **out)
++{
++   struct pipe_screen *screen = get_st_manager()->screen;
++   enum st_attachment_type i;
++   struct osmesa_buffer *osbuffer = stfbi_to_osbuffer(stfbi);
++   struct pipe_resource templat;
++
++   memset(&templat, 0, sizeof(templat));
++   templat.target = PIPE_TEXTURE_RECT;
++   templat.format = 0; /* setup below */
++   templat.last_level = 0;
++   templat.width0 = osbuffer->width;
++   templat.height0 = osbuffer->height;
++   templat.depth0 = 1;
++   templat.array_size = 1;
++   templat.usage = PIPE_USAGE_DEFAULT;
++   templat.bind = 0; /* setup below */
++   templat.flags = 0;
++
++   for (i = 0; i < count; i++) {
++      enum pipe_format format = PIPE_FORMAT_NONE;
++      unsigned bind = 0;
++
++      if (statts[i] == ST_ATTACHMENT_FRONT_LEFT || statts[i] == ST_ATTACHMENT_BACK_LEFT) {
++         format = osbuffer->visual.color_format;
++         bind = PIPE_BIND_DISPLAY_TARGET |
++                PIPE_BIND_SAMPLER_VIEW |
++                PIPE_BIND_RENDER_TARGET;
++#ifdef GALLIUM_ZINK
++         //if (stw_dev->zink) {
++            /* Covers the case where we have already created a drawable that
++             * then got swapped and now we have to make a new back buffer.
++             * For Zink, we just alias the front buffer in that case.
++             */
++            if (i == ST_ATTACHMENT_BACK_LEFT && osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT])
++               bind &= ~PIPE_BIND_DISPLAY_TARGET;
++         //}
++#endif
++      }
++      else if (statts[i] == ST_ATTACHMENT_DEPTH_STENCIL) {
++         format = osbuffer->visual.depth_stencil_format;
++         bind = PIPE_BIND_DEPTH_STENCIL;
++      }
++      else if (statts[i] == ST_ATTACHMENT_ACCUM) {
++         format = osbuffer->visual.accum_format;
++         bind = PIPE_BIND_RENDER_TARGET;
++      }
++      else {
++         debug_warning("Unexpected attachment type in "
++                       "osmesa_st_framebuffer_validate()");
++      }
++
++      templat.format = format;
++      templat.bind = bind;
++      pipe_resource_reference(&out[i], NULL);
++#ifdef GALLIUM_ZINK
++printf("create resource: statts[%d] = %d, screen->resource_create_drawable = %p, bind & PIPE_BIND_DISPLAY_TARGET = %d\n",
++i, statts[i], screen->resource_create_drawable, bind & PIPE_BIND_DISPLAY_TARGET);
++      if (statts[i] < ST_ATTACHMENT_DEPTH_STENCIL && screen->resource_create_drawable && osbuffer->map /* && is_window */) {
++         struct kopper_loader_info loader_info;
++         void *data;
++
++         if (bind & PIPE_BIND_DISPLAY_TARGET) {
++            osmesa_fill_private_loader_data(osbuffer, &loader_info);
++            data = &loader_info;
++         } else
++            data = osbuffer->textures[ST_ATTACHMENT_BACK_LEFT];
++
++         assert(data);
++         out[i] = osbuffer->textures[statts[i]] =
++            screen->resource_create_drawable(screen, &templat, data);
++      } else {
++#endif
++         out[i] = osbuffer->textures[statts[i]] =
++            screen->resource_create(screen, &templat);
++#ifdef GALLIUM_ZINK
++      }
++#endif
++   }
++
++   return true;
++}
++
++static uint32_t osmesa_fb_ID = 0;
++
++static struct st_framebuffer_iface *
++osmesa_create_st_framebuffer(void)
++{
++   struct st_framebuffer_iface *stfbi = CALLOC_STRUCT(st_framebuffer_iface);
++   if (stfbi) {
++      stfbi->flush_front = osmesa_st_framebuffer_flush_front;
++      stfbi->validate = osmesa_st_framebuffer_validate;
++      p_atomic_set(&stfbi->stamp, 1);
++      stfbi->ID = p_atomic_inc_return(&osmesa_fb_ID);
++      stfbi->state_manager = get_st_manager();
++   }
++   return stfbi;
++}
++
++
++/**
++ * Create new buffer and add to linked list.
++ */
++static struct osmesa_buffer *
++osmesa_create_buffer(enum pipe_format color_format,
++                     enum pipe_format ds_format,
++                     enum pipe_format accum_format)
++{
++   struct osmesa_buffer *osbuffer = CALLOC_STRUCT(osmesa_buffer);
++   if (osbuffer) {
++      osbuffer->stfb = osmesa_create_st_framebuffer();
++
++      osbuffer->stfb->st_manager_private = osbuffer;
++      osbuffer->stfb->visual = &osbuffer->visual;
++
++      osmesa_init_st_visual(&osbuffer->visual, color_format,
++                            ds_format, accum_format);
++   }
++
++   return osbuffer;
++}
++
++
++static void
++osmesa_destroy_buffer(struct osmesa_buffer *osbuffer)
++{
++   /*
++    * Notify the state manager that the associated framebuffer interface
++    * is no longer valid.
++    */
++   stapi->destroy_drawable(stapi, osbuffer->stfb);
++
++   FREE(osbuffer->stfb);
++   FREE(osbuffer);
++}
++
++
++
++/**********************************************************************/
++/*****                    Public Functions                        *****/
++/**********************************************************************/
++
++
++/**
++ * Create an Off-Screen Mesa rendering context.  The only attribute needed is
++ * an RGBA vs Color-Index mode flag.
++ *
++ * Input:  format - Must be GL_RGBA
++ *         sharelist - specifies another OSMesaContext with which to share
++ *                     display lists.  NULL indicates no sharing.
++ * Return:  an OSMesaContext or 0 if error
++ */
++GLAPI OSMesaContext GLAPIENTRY
++OSMesaCreateContext(GLenum format, OSMesaContext sharelist)
++{
++   return OSMesaCreateContextExt(format, 24, 8, 0, sharelist);
++}
++
++
++/**
++ * New in Mesa 3.5
++ *
++ * Create context and specify size of ancillary buffers.
++ */
++GLAPI OSMesaContext GLAPIENTRY
++OSMesaCreateContextExt(GLenum format, GLint depthBits, GLint stencilBits,
++                       GLint accumBits, OSMesaContext sharelist)
++{
++   int attribs[100], n = 0;
++
++   attribs[n++] = OSMESA_FORMAT;
++   attribs[n++] = format;
++   attribs[n++] = OSMESA_DEPTH_BITS;
++   attribs[n++] = depthBits;
++   attribs[n++] = OSMESA_STENCIL_BITS;
++   attribs[n++] = stencilBits;
++   attribs[n++] = OSMESA_ACCUM_BITS;
++   attribs[n++] = accumBits;
++   attribs[n++] = 0;
++
++   return OSMesaCreateContextAttribs(attribs, sharelist);
++}
++
++
++/**
++ * New in Mesa 11.2
++ *
++ * Create context with attribute list.
++ */
++GLAPI OSMesaContext GLAPIENTRY
++OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
++{
++   OSMesaContext osmesa;
++   struct st_context_iface *st_shared;
++   enum st_context_error st_error = 0;
++   struct st_context_attribs attribs;
++   struct st_api *stapi = get_st_api();
++   GLenum format = GL_RGBA;
++   int depthBits = 0, stencilBits = 0, accumBits = 0;
++   int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
++   int i;
++
++   if (sharelist) {
++      st_shared = sharelist->stctx;
++   }
++   else {
++      st_shared = NULL;
++   }
++
++   for (i = 0; attribList[i]; i += 2) {
++      switch (attribList[i]) {
++      case OSMESA_FORMAT:
++         format = attribList[i+1];
++         switch (format) {
++         case OSMESA_COLOR_INDEX:
++         case OSMESA_RGBA:
++         case OSMESA_BGRA:
++         case OSMESA_ARGB:
++         case OSMESA_RGB:
++         case OSMESA_BGR:
++         case OSMESA_RGB_565:
++            /* legal */
++            break;
++         default:
++            return NULL;
++         }
++         break;
++      case OSMESA_DEPTH_BITS:
++         depthBits = attribList[i+1];
++         if (depthBits < 0)
++            return NULL;
++         break;
++      case OSMESA_STENCIL_BITS:
++         stencilBits = attribList[i+1];
++         if (stencilBits < 0)
++            return NULL;
++         break;
++      case OSMESA_ACCUM_BITS:
++         accumBits = attribList[i+1];
++         if (accumBits < 0)
++            return NULL;
++         break;
++      case OSMESA_PROFILE:
++         profile = attribList[i+1];
++         if (profile != OSMESA_CORE_PROFILE &&
++             profile != OSMESA_COMPAT_PROFILE)
++            return NULL;
++         break;
++      case OSMESA_CONTEXT_MAJOR_VERSION:
++         version_major = attribList[i+1];
++         if (version_major < 1)
++            return NULL;
++         break;
++      case OSMESA_CONTEXT_MINOR_VERSION:
++         version_minor = attribList[i+1];
++         if (version_minor < 0)
++            return NULL;
++         break;
++      case 0:
++         /* end of list */
++         break;
++      default:
++         fprintf(stderr, "Bad attribute in OSMesaCreateContextAttribs()\n");
++         return NULL;
++      }
++   }
++
++   osmesa = (OSMesaContext) CALLOC_STRUCT(osmesa_context);
++   if (!osmesa)
++      return NULL;
++
++   /* Choose depth/stencil/accum buffer formats */
++   if (accumBits > 0) {
++      osmesa->accum_format = PIPE_FORMAT_R16G16B16A16_SNORM;
++   }
++   if (depthBits > 0 && stencilBits > 0) {
++      osmesa->depth_stencil_format = PIPE_FORMAT_Z24_UNORM_S8_UINT;
++   }
++   else if (stencilBits > 0) {
++      osmesa->depth_stencil_format = PIPE_FORMAT_S8_UINT;
++   }
++   else if (depthBits >= 24) {
++      osmesa->depth_stencil_format = PIPE_FORMAT_Z24X8_UNORM;
++   }
++   else if (depthBits >= 16) {
++      osmesa->depth_stencil_format = PIPE_FORMAT_Z16_UNORM;
++   }
++
++   /*
++    * Create the rendering context
++    */
++   memset(&attribs, 0, sizeof(attribs));
++   attribs.profile = (profile == OSMESA_CORE_PROFILE)
++      ? ST_PROFILE_OPENGL_CORE : ST_PROFILE_DEFAULT;
++   attribs.major = version_major;
++   attribs.minor = version_minor;
++   attribs.flags = 0;  /* ST_CONTEXT_FLAG_x */
++   attribs.options.force_glsl_extensions_warn = FALSE;
++   attribs.options.disable_blend_func_extended = FALSE;
++   attribs.options.disable_glsl_line_continuations = FALSE;
++   attribs.options.force_glsl_version = 0;
++
++   osmesa_init_st_visual(&attribs.visual,
++                         PIPE_FORMAT_NONE,
++                         osmesa->depth_stencil_format,
++                         osmesa->accum_format);
++
++   osmesa->stctx = stapi->create_context(stapi, get_st_manager(),
++                                         &attribs, &st_error, st_shared);
++   if (!osmesa->stctx) {
++      FREE(osmesa);
++      return NULL;
++   }
++
++   osmesa->stctx->st_manager_private = osmesa;
++
++   osmesa->format = format;
++   osmesa->user_row_length = 0;
++   osmesa->y_up = GL_TRUE;
++
++   return osmesa;
++}
++
++
++
++/**
++ * Destroy an Off-Screen Mesa rendering context.
++ *
++ * \param osmesa  the context to destroy
++ */
++GLAPI void GLAPIENTRY
++OSMesaDestroyContext(OSMesaContext osmesa)
++{
++   if (osmesa) {
++      pp_free(osmesa->pp);
++      osmesa->stctx->destroy(osmesa->stctx);
++      free(osmesa->zs);
++      FREE(osmesa);
++   }
++}
++
++
++/**
++ * Bind an OSMesaContext to an image buffer.  The image buffer is just a
++ * block of memory which the client provides.  Its size must be at least
++ * as large as width*height*pixelSize.  Its address should be a multiple
++ * of 4 if using RGBA mode.
++ *
++ * By default, image data is stored in the order of glDrawPixels: row-major
++ * order with the lower-left image pixel stored in the first array position
++ * (ie. bottom-to-top).
++ *
++ * If the context's viewport hasn't been initialized yet, it will now be
++ * initialized to (0,0,width,height).
++ *
++ * Input:  osmesa - the rendering context
++ *         buffer - the image buffer memory
++ *         type - data type for pixel components
++ *                GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT_5_6_5, GL_UNSIGNED_SHORT
++ *                or GL_FLOAT.
++ *         width, height - size of image buffer in pixels, at least 1
++ * Return:  GL_TRUE if success, GL_FALSE if error because of invalid osmesa,
++ *          invalid type, invalid size, etc.
++ */
++GLAPI GLboolean GLAPIENTRY
++OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
++                  GLsizei width, GLsizei height)
++{
++   struct st_api *stapi = get_st_api();
++   enum pipe_format color_format;
++
++   if (!osmesa && !buffer) {
++      stapi->make_current(stapi, NULL, NULL, NULL);
++      return GL_TRUE;
++   }
++
++   if (!osmesa /*|| !buffer*/ || width < 1 || height < 1) {
++      return GL_FALSE;
++   }
++
++   color_format = osmesa_choose_format(osmesa->format, type);
++   if (color_format == PIPE_FORMAT_NONE) {
++      fprintf(stderr, "OSMesaMakeCurrent(unsupported format/type)\n");
++      return GL_FALSE;
++   }
++
++   /* See if we already have a buffer that uses these pixel formats */
++   if (osmesa->current_buffer &&
++       (osmesa->current_buffer->visual.color_format != color_format ||
++        osmesa->current_buffer->visual.depth_stencil_format != osmesa->depth_stencil_format ||
++        osmesa->current_buffer->visual.accum_format != osmesa->accum_format ||
++        osmesa->current_buffer->width != width ||
++        osmesa->current_buffer->height != height)) {
++      osmesa_destroy_buffer(osmesa->current_buffer);
++      osmesa->current_buffer = NULL;
++   }
++
++   if (!osmesa->current_buffer) {
++      osmesa->current_buffer = osmesa_create_buffer(color_format,
++                                      osmesa->depth_stencil_format,
++                                      osmesa->accum_format);
++   }
++
++   struct osmesa_buffer *osbuffer = osmesa->current_buffer;
++
++   osbuffer->width = width;
++   osbuffer->height = height;
++   osbuffer->map = buffer;
++
++   osmesa->type = type;
++
++   stapi->make_current(stapi, osmesa->stctx, osbuffer->stfb, osbuffer->stfb);
++
++   /* XXX: We should probably load the current color value into the buffer here
++    * to match classic swrast behavior (context's fb starts with the contents of
++    * your pixel buffer).
++    */
++
++   if (!osmesa->ever_used) {
++      /* one-time init, just postprocessing for now */
++      boolean any_pp_enabled = FALSE;
++      unsigned i;
++
++      for (i = 0; i < ARRAY_SIZE(osmesa->pp_enabled); i++) {
++         if (osmesa->pp_enabled[i]) {
++            any_pp_enabled = TRUE;
++            break;
++         }
++      }
++
++      if (any_pp_enabled) {
++         osmesa->pp = pp_init(osmesa->stctx->pipe,
++                              osmesa->pp_enabled,
++                              osmesa->stctx->cso_context,
++                              osmesa->stctx);
++
++         pp_init_fbos(osmesa->pp, width, height);
++      }
++
++      osmesa->ever_used = TRUE;
++   }
++
++   return GL_TRUE;
++}
++
++
++
++GLAPI OSMesaContext GLAPIENTRY
++OSMesaGetCurrentContext(void)
++{
++   struct st_api *stapi = get_st_api();
++   struct st_context_iface *st = stapi->get_current(stapi);
++   return st ? (OSMesaContext) st->st_manager_private : NULL;
++}
++
++
++
++GLAPI void GLAPIENTRY
++OSMesaPixelStore(GLint pname, GLint value)
++{
++   OSMesaContext osmesa = OSMesaGetCurrentContext();
++
++   switch (pname) {
++   case OSMESA_ROW_LENGTH:
++      osmesa->user_row_length = value;
++      break;
++   case OSMESA_Y_UP:
++      osmesa->y_up = value ? GL_TRUE : GL_FALSE;
++      break;
++   default:
++      fprintf(stderr, "Invalid pname in OSMesaPixelStore()\n");
++      return;
++   }
++}
++
++
++GLAPI void GLAPIENTRY
++OSMesaGetIntegerv(GLint pname, GLint *value)
++{
++   OSMesaContext osmesa = OSMesaGetCurrentContext();
++   struct osmesa_buffer *osbuffer = osmesa ? osmesa->current_buffer : NULL;
++
++   switch (pname) {
++   case OSMESA_WIDTH:
++      *value = osbuffer ? osbuffer->width : 0;
++      return;
++   case OSMESA_HEIGHT:
++      *value = osbuffer ? osbuffer->height : 0;
++      return;
++   case OSMESA_FORMAT:
++      *value = osmesa->format;
++      return;
++   case OSMESA_TYPE:
++      /* current color buffer's data type */
++      *value = osmesa->type;
++      return;
++   case OSMESA_ROW_LENGTH:
++      *value = osmesa->user_row_length;
++      return;
++   case OSMESA_Y_UP:
++      *value = osmesa->y_up;
++      return;
++   case OSMESA_MAX_WIDTH:
++      FALLTHROUGH;
++   case OSMESA_MAX_HEIGHT:
++      {
++         struct pipe_screen *screen = get_st_manager()->screen;
++         *value = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
++      }
++      return;
++   default:
++      fprintf(stderr, "Invalid pname in OSMesaGetIntegerv()\n");
++      return;
++   }
++}
++
++
++/**
++ * Return information about the depth buffer associated with an OSMesa context.
++ * Input:  c - the OSMesa context
++ * Output:  width, height - size of buffer in pixels
++ *          bytesPerValue - bytes per depth value (2 or 4)
++ *          buffer - pointer to depth buffer values
++ * Return:  GL_TRUE or GL_FALSE to indicate success or failure.
++ */
++GLAPI GLboolean GLAPIENTRY
++OSMesaGetDepthBuffer(OSMesaContext c, GLint *width, GLint *height,
++                     GLint *bytesPerValue, void **buffer)
++{
++   struct osmesa_buffer *osbuffer = c->current_buffer;
++   struct pipe_resource *res = osbuffer->textures[ST_ATTACHMENT_DEPTH_STENCIL];
++
++   if (!res) {
++      *width = 0;
++      *height = 0;
++      *bytesPerValue = 0;
++      *buffer = NULL;
++      return GL_FALSE;
++   }
++
++   *width = res->width0;
++   *height = res->height0;
++   *bytesPerValue = util_format_get_blocksize(res->format);
++
++   if (!c->zs) {
++      c->zs_stride = *width * *bytesPerValue;
++      c->zs = calloc(c->zs_stride, *height);
++      if (!c->zs)
++         return GL_FALSE;
++
++      abort();
++      //osmesa_read_buffer(c, res, c->zs, c->zs_stride, true);
++   }
++
++   *buffer = c->zs;
++
++   return GL_TRUE;
++}
++
++
++/**
++ * Return the color buffer associated with an OSMesa context.
++ * Input:  c - the OSMesa context
++ * Output:  width, height - size of buffer in pixels
++ *          format - the pixel format (OSMESA_FORMAT)
++ *          buffer - pointer to color buffer values
++ * Return:  GL_TRUE or GL_FALSE to indicate success or failure.
++ */
++GLAPI GLboolean GLAPIENTRY
++OSMesaGetColorBuffer(OSMesaContext osmesa, GLint *width,
++                      GLint *height, GLint *format, void **buffer)
++{
++   struct osmesa_buffer *osbuffer = osmesa->current_buffer;
++
++   if (osbuffer) {
++      *width = osbuffer->width;
++      *height = osbuffer->height;
++      *format = osmesa->format;
++      *buffer = osbuffer->map;
++      return GL_TRUE;
++   }
++   else {
++      *width = 0;
++      *height = 0;
++      *format = 0;
++      *buffer = 0;
++      return GL_FALSE;
++   }
++}
++
++
++struct name_function
++{
++   const char *Name;
++   OSMESAproc Function;
++};
++
++static struct name_function functions[] = {
++   { "OSMesaCreateContext", (OSMESAproc) OSMesaCreateContext },
++   { "OSMesaCreateContextExt", (OSMESAproc) OSMesaCreateContextExt },
++   { "OSMesaCreateContextAttribs", (OSMESAproc) OSMesaCreateContextAttribs },
++   { "OSMesaDestroyContext", (OSMESAproc) OSMesaDestroyContext },
++   { "OSMesaMakeCurrent", (OSMESAproc) OSMesaMakeCurrent },
++   { "OSMesaGetCurrentContext", (OSMESAproc) OSMesaGetCurrentContext },
++   { "OSMesaPixelStore", (OSMESAproc) OSMesaPixelStore },
++   { "OSMesaGetIntegerv", (OSMESAproc) OSMesaGetIntegerv },
++   { "OSMesaGetDepthBuffer", (OSMESAproc) OSMesaGetDepthBuffer },
++   { "OSMesaGetColorBuffer", (OSMESAproc) OSMesaGetColorBuffer },
++   { "OSMesaGetProcAddress", (OSMESAproc) OSMesaGetProcAddress },
++   { "OSMesaColorClamp", (OSMESAproc) OSMesaColorClamp },
++   { "OSMesaPostprocess", (OSMESAproc) OSMesaPostprocess },
++   { "OSMesaFlushFrontbuffer", (OSMESAproc) OSMesaFlushFrontbuffer },
++   { NULL, NULL }
++};
++
++
++GLAPI OSMESAproc GLAPIENTRY
++OSMesaGetProcAddress(const char *funcName)
++{
++   int i;
++   for (i = 0; functions[i].Name; i++) {
++      if (strcmp(functions[i].Name, funcName) == 0)
++         return functions[i].Function;
++   }
++   return _glapi_get_proc_address(funcName);
++}
++
++
++GLAPI void GLAPIENTRY
++OSMesaColorClamp(GLboolean enable)
++{
++   extern void GLAPIENTRY _mesa_ClampColor(GLenum target, GLenum clamp);
++
++   _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR_ARB,
++                    enable ? GL_TRUE : GL_FIXED_ONLY_ARB);
++}
++
++
++GLAPI void GLAPIENTRY
++OSMesaPostprocess(OSMesaContext osmesa, const char *filter,
++                  unsigned enable_value)
++{
++   if (!osmesa->ever_used) {
++      /* We can only enable/disable postprocess filters before a context
++       * is made current for the first time.
++       */
++      unsigned i;
++
++      for (i = 0; i < PP_FILTERS; i++) {
++         if (strcmp(pp_filters[i].name, filter) == 0) {
++            osmesa->pp_enabled[i] = enable_value;
++            return;
++         }
++      }
++      debug_warning("OSMesaPostprocess(unknown filter)\n");
++   }
++   else {
++      debug_warning("Calling OSMesaPostprocess() after OSMesaMakeCurrent()\n");
++   }
++}
++
++
++GLAPI void GLAPIENTRY
++OSMesaFlushFrontbuffer() {
++   OSMesaContext osmesa = OSMesaGetCurrentContext();
++   osmesa_st_framebuffer_flush_front(osmesa->stctx, osmesa->current_buffer->stfb, ST_ATTACHMENT_BACK_LEFT);
++}
+diff --git a/src/gallium/targets/dri/target.c b/src/gallium/targets/dri/target.c
+index d506869..7172bb6 100644
+--- a/src/gallium/targets/dri/target.c
++++ b/src/gallium/targets/dri/target.c
+@@ -7,7 +7,9 @@
+ const __DRIextension **__driDriverGetExtensions_##drivername(void);       \
+ PUBLIC const __DRIextension **__driDriverGetExtensions_##drivername(void) \
+ {                                                                         \
+-   return galliumdrm_driver_extensions;                                   \
++   /* return galliumdrm_driver_extensions; */                             \
++   printf("STUB: __driDriverGetExtensions_swrast\n");                     \
++   return NULL;                                                           \
+ }
+ 
+ #if defined(GALLIUM_SOFTPIPE)
+@@ -128,7 +130,7 @@ DEFINE_LOADER_DRM_ENTRYPOINT(sun4i_drm)
+ DEFINE_LOADER_DRM_ENTRYPOINT(lima)
+ #endif
+ 
+-#if defined(GALLIUM_ZINK) && !defined(__APPLE__)
++#if defined(GALLIUM_ZINK) && //!defined(__APPLE__)
+ #if defined(ANDROID)
+ DEFINE_LOADER_DRM_ENTRYPOINT(zink);
+ #else
+@@ -136,7 +138,9 @@ const __DRIextension **__driDriverGetExtensions_zink(void);
+ 
+ PUBLIC const __DRIextension **__driDriverGetExtensions_zink(void)
+ {
+-   return galliumvk_driver_extensions;
++   //return galliumvk_driver_extensions;
++   printf("STUB: __driDriverGetExtensions_zink\n");
++   return NULL;
+ }
+ #endif
+ #endif
+diff --git a/src/gallium/targets/osmesa/meson.build b/src/gallium/targets/osmesa/meson.build
+index d16e785..45df4b5 100644
+--- a/src/gallium/targets/osmesa/meson.build
++++ b/src/gallium/targets/osmesa/meson.build
+@@ -19,9 +19,13 @@
+ # SOFTWARE.
+ 
+ osmesa_link_with = []
+-osmesa_link_args = []
++osmesa_link_args = ['-lvulkan']
+ osmesa_link_deps = []
+ 
++if host_machine.system() == 'darwin'
++  osmesa_link_args = []
++endif
++
+ if with_shared_glapi
+   osmesa_link_with += libglapi
+ endif
+@@ -55,7 +59,8 @@ libosmesa = shared_library(
+     libmesa, libgallium, libws_null, osmesa_link_with,
+   ],
+   dependencies : [
+-    dep_ws2_32, dep_selinux, dep_thread, dep_clock, dep_unwind, driver_swrast
++    dep_ws2_32, dep_selinux, dep_thread, dep_clock, dep_unwind, driver_swrast, driver_zink,
++    idep_xmlconfig
+   ],
+   name_prefix : host_machine.system() == 'windows' ? '' : [],  # otherwise mingw will create libosmesa.dll
+   soversion : host_machine.system() == 'windows' ? '' : '8',
+diff --git a/src/gallium/targets/osmesa/osmesa.sym b/src/gallium/targets/osmesa/osmesa.sym
+index f788e5a..9f6e8a5 100644
+--- a/src/gallium/targets/osmesa/osmesa.sym
++++ b/src/gallium/targets/osmesa/osmesa.sym
+@@ -13,6 +13,7 @@
+ 		OSMesaMakeCurrent;
+ 		OSMesaPixelStore;
+ 		OSMesaPostprocess;
++                OSMesaFlushFrontbuffer;
+ 		gl*;
+ 	local:
+ 		*;
+diff --git a/src/gallium/winsys/sw/dri/dri_sw_winsys.c b/src/gallium/winsys/sw/dri/dri_sw_winsys.c
+index 35a267f..b66b01d 100644
+--- a/src/gallium/winsys/sw/dri/dri_sw_winsys.c
++++ b/src/gallium/winsys/sw/dri/dri_sw_winsys.c
+@@ -26,6 +26,10 @@
+  *
+  **************************************************************************/
+ 
++#ifdef ANDROID
++#undef HAVE_SYS_SHM_H
++#endif
++
+ #ifdef HAVE_SYS_SHM_H
+ #include <sys/ipc.h>
+ #include <sys/shm.h>
+diff --git a/src/gallium/winsys/virgl/drm/meson.build b/src/gallium/winsys/virgl/drm/meson.build
+index 79bac2f..9f427be 100644
+--- a/src/gallium/winsys/virgl/drm/meson.build
++++ b/src/gallium/winsys/virgl/drm/meson.build
+@@ -18,9 +18,10 @@
+ # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ # SOFTWARE.
+ 
++#  'virgl_drm_winsys.c',
++
+ libvirgldrm = static_library(
+   'virgldrm',
+-  'virgl_drm_winsys.c',
+   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_virtio],
+   dependencies : [dep_libdrm, dep_libvirglcommon, idep_mesautil, idep_nir_headers],
+   gnu_symbol_visibility : 'hidden',
+diff --git a/src/glx/empty.c b/src/glx/empty.c
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/glx/meson.build b/src/glx/meson.build
+index 20f0474..1221a02 100644
+--- a/src/glx/meson.build
++++ b/src/glx/meson.build
+@@ -73,6 +73,10 @@ files_libglx = files(
+   'xfont.c',
+ )
+ 
++if with_platform_android or host_machine.system() == 'darwin'
++dep_xdamage = null_dep
++endif
++
+ extra_libs_libglx = []
+ extra_deps_libgl = []
+ extra_ld_args_libgl = []
+@@ -124,7 +128,7 @@ endif
+ 
+ libglx = static_library(
+   'glx',
+-  [files_libglx, glx_generated],
++  not with_platform_android and host_machine.system() != 'darwin' ? [files_libglx, glx_generated] : ['empty.c'],
+   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glapi, inc_loader],
+   c_args : [
+     '-DGL_LIB_NAME="lib@0@.so.@1@"'.format(gl_lib_name, gl_lib_version.split('.')[0]),
+diff --git a/sync.pc b/sync.pc
+new file mode 100644
+index 0000000..521c3a8
+--- /dev/null
++++ b/sync.pc
+@@ -0,0 +1,4 @@
++Name: sync
++Description: Android libsync library
++Version: 1.0
++Libs:
+diff --git a/vulkan_android.pc b/vulkan_android.pc
+new file mode 100644
+index 0000000..e112758
+--- /dev/null
++++ b/vulkan_android.pc
+@@ -0,0 +1,4 @@
++Name: vulkan
++Description: Android Vulkan library
++Version: 1.2
++Libs: -lvulkan
+diff --git a/vulkan_ios.pc b/vulkan_ios.pc
+new file mode 100644
+index 0000000..4e8474a
+--- /dev/null
++++ b/vulkan_ios.pc
+@@ -0,0 +1,4 @@
++Name: vulkan
++Description: MoltenVK library
++Version: 1.2
++Libs: -L../ext -lMoltenVK

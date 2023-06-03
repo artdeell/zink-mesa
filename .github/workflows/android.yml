@@ -1,0 +1,70 @@
+
+name: Build Android
+
+on:
+  [push, pull_request]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    strategy:
+      matrix:
+        arch: [ "arm32", "aarch64", "x86_64" ]
+      fail-fast: false
+
+    name: "Build for ${{matrix.arch}}"
+
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build
+        run: |
+          ln -s vulkan_android.pc vulkan.pc
+          sudo apt update
+          sudo apt install -y meson libxrandr-dev libxxf86vm-dev libxcb-*-dev libx11-xcb-dev libxfixes-dev libdrm-dev libx11-dev
+          cp -R /usr/include/X11 include/
+          cp -R /usr/include/xcb include/
+          cp -R /usr/include/GL/* include/GL/
+          pip3 install mako
+          #
+          if [ "${{matrix.arch}}" == "arm32" ]; then
+            export ANDROID_TARGET=armv7a-linux-androideabi
+          elif [ "${{matrix.arch}}" == "aarch64" ]; then
+            export ANDROID_TARGET=aarch64-linux-android
+          elif [ "${{matrix.arch}}" == "x86_64" ]; then
+            export ANDROID_TARGET=x86_64-linux-android
+          fi
+          bash android-cross-file-gen.sh
+          # -Dglx=gallium-xlib \
+          meson "build-android-${{matrix.arch}}" \
+            --prefix=/tmp/mesa \
+            --cross-file "/tmp/generated-cross-file" \
+            --buildtype debug \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=26 \
+            -Dandroid-stub=true \
+            -Dllvm=disabled \
+            -Dxlib-lease=disabled \
+            -Degl=disabled \
+            -Dgbm=disabled \
+            -Dglx=dri \
+            -Dglx-direct=true \
+            -Dopengl=true \
+            -Dosmesa=true \
+            -Dvulkan-drivers= \
+            -Dgallium-drivers=zink \
+            -Dshared-glapi=false
+          ninja -C "build-android-${{matrix.arch}}" install
+          # cp "build-android-${{matrix.arch}}/src/gallium/drivers/mesa/libzinkk.a" /tmp/mesa/lib/
+          rm /tmp/mesa/lib/libOSMesa.so /tmp/mesa/lib/libOSMesa.so.8
+          mv /tmp/mesa/lib/libOSMesa.so.8.0.0 /tmp/mesa/lib/libOSMesa.so.8
+          mv /tmp/mesa/lib/libOSMesa.so.8 /tmp/mesa/lib/libOSMesa_unstripped.so.8
+          # $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/${ANDROID_TARGET}-strip /tmp/mesa/lib/libOSMesa.so.8
+          # mv /tmp/mesa/lib/libOSMesa.so.8 /tmp/mesa/lib/libOSMesa_8.so
+      - name: Upload libraries
+        uses: actions/upload-artifact@v2
+        with:
+          name: libmesa_${{matrix.arch}}
+          path: /tmp/mesa
