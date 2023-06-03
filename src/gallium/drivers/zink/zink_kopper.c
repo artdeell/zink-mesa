@@ -202,16 +202,18 @@ find_dt_entry(struct zink_screen *screen, const struct kopper_displaytarget *cdt
    struct hash_entry *he = NULL;
    switch (cdt->type) {
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
-   case KOPPER_ANDROID:
+   case KOPPER_ANDROID: {
       VkAndroidSurfaceCreateInfoKHR *android = (VkAndroidSurfaceCreateInfoKHR*)&cdt->info.bos;
       he = _mesa_hash_table_search(&screen->dts, android->window);
       break;
+   }
 #endif
 #ifdef VK_USE_PLATFORM_METAL_EXT
-   case KOPPER_METAL:
+   case KOPPER_METAL: {
       VkMetalSurfaceCreateInfoEXT *metal = (VkMetalSurfaceCreateInfoEXT*)&cdt->info.bos;
       he = _mesa_hash_table_search(&screen->dts, metal->pLayer);
       break;
+   }
 #endif
 #ifdef VK_USE_PLATFORM_XCB_KHR
    case KOPPER_X11: {
@@ -473,16 +475,18 @@ zink_kopper_displaytarget_create(struct zink_screen *screen, unsigned tex_usage,
    simple_mtx_lock(&screen->dt_lock);
    switch (cdt->type) {
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
-   case KOPPER_ANDROID:
+   case KOPPER_ANDROID: {
       VkAndroidSurfaceCreateInfoKHR *android = (VkAndroidSurfaceCreateInfoKHR*)&cdt->info.bos;
       _mesa_hash_table_insert(&screen->dts, android->window, cdt);
       break;
+   }
 #endif
 #ifdef VK_USE_PLATFORM_METAL_EXT
-   case KOPPER_METAL:
+   case KOPPER_METAL: {
       VkMetalSurfaceCreateInfoEXT *metal = (VkMetalSurfaceCreateInfoEXT*)&cdt->info.bos;
       _mesa_hash_table_insert(&screen->dts, metal->pLayer, cdt);
       break;
+   }
 #endif
 #ifdef VK_USE_PLATFORM_XCB_KHR
    case KOPPER_X11: {
