@@ -2698,6 +2698,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
    void* vulkan_loader_ptr;
    if(vulkan_ptr_text != NULL) {
       vulkan_loader_ptr = (void*) strtoul(vulkan_ptr_text, NULL, 0x10);
+      mesa_logi("zink: Vulkan pointer text: %s; parsed: %p", vulkan_ptr_text, vulkan_loader_ptr);
    }else {
       vulkan_loader_ptr = util_dl_open(VK_LIBNAME);
    }
