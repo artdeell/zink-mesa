@@ -2693,8 +2693,15 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
 
 
    u_trace_state_init();
-
-   screen->loader_lib = util_dl_open(VK_LIBNAME);
+   
+   char* vulkan_ptr_text = getenv("VULKAN_PTR");
+   void* vulkan_loader_ptr;
+   if(vulkan_ptr_text != NULL) {
+      vulkan_loader_ptr = (void*) strtoul(vulkan_ptr_text, NULL, 0x10);
+   }else {
+      vulkan_loader_ptr = util_dl_open(VK_LIBNAME);
+   }
+   screen->loader_lib = vulkan_loader_ptr;
    if (!screen->loader_lib)
       goto fail;
 
