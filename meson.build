@@ -1417,9 +1417,9 @@ endif
 if cc.has_function('dl_iterate_phdr')
   if with_intel_vk or with_intel_hasvk
     pre_args += '-DHAVE_DL_ITERATE_PHDR'
-  else
-    error('Intel "Anvil" Vulkan driver requires the dl_iterate_phdr function')
   endif  
+elif with_intel_vk or with_intel_hasvk
+  error('Intel "Anvil" Vulkan driver requires the dl_iterate_phdr function')
 endif
 
 # only used in Iris and ANV
