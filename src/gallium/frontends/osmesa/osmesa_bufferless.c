@@ -354,7 +354,7 @@ osmesa_st_framebuffer_flush_front(struct st_context *st,
    //printf("FRONT_LEFT: %p\n", osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT]);
    //osmesa_st_framebuffer_flush_front
    //printf("screen->flush_frontbuffer = %p\n", screen->flush_frontbuffer);
-   _mesa_glthread_finish(ctx->st->ctx);
+   _mesa_glthread_finish(st->ctx);
    struct pipe_fence_handle *new_fence = NULL;
    static struct pipe_fence_handle *fence = NULL;
    st_context_flush(st, ST_FLUSH_FRONT | ST_FLUSH_END_OF_FRAME, &new_fence, NULL, NULL);
