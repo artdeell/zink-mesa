@@ -354,6 +354,16 @@ osmesa_st_framebuffer_flush_front(struct st_context *st,
    //printf("FRONT_LEFT: %p\n", osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT]);
    //osmesa_st_framebuffer_flush_front
    //printf("screen->flush_frontbuffer = %p\n", screen->flush_frontbuffer);
+   _mesa_glthread_finish(ctx->st->ctx);
+   struct pipe_fence_handle *new_fence = NULL;
+   static struct pipe_fence_handle *fence = NULL;
+   st_context_flush(st, ST_FLUSH_FRONT | ST_FLUSH_END_OF_FRAME, &new_fence, NULL, NULL);
+   if(fence) {
+      screen->fence_finish(screen, NULL, fence, PIPE_TIMEOUT_INFINITE);
+      screen->fence_reference(screen, &fence, NULL);
+   }
+   fence = new_fence;
+   st_context_invalidate_state(st, ST_INVALIDATE_FB_STATE);
    st->pipe->flush_resource(st->pipe, res); //osbuffer->textures[ST_ATTACHMENT_BACK_LEFT]
    ((struct zink_screen *)screen)->base.flush_frontbuffer(screen, st->pipe, res, 0, 0, NULL /* drawable */, NULL /* sub_box */);
    osbuffer->textures[ST_ATTACHMENT_BACK_LEFT] = osbuffer->textures[ST_ATTACHMENT_FRONT_LEFT];
